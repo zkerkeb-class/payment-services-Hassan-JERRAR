@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+    payment-service:
+        build: .
+        container_name: zenbilling-payment-service
+        ports:
+            - "3001:3001"
+        environment:
+            - NODE_ENV=production
+            - PORT=3001
+            - DATABASE_URL=postgresql://payment_user:payment_password@payment-db:5432/payment_db
+            - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+            - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+            - SUPABASE_URL=${SUPABASE_URL}
+            - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+            - BREVO_API_KEY=${BREVO_API_KEY}
+            - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
+        depends_on:
+            payment-db:
+                condition: service_healthy
+        networks:
+            - payment-network
+        restart: unless-stopped
+        volumes:
+            - ./logs:/app/logs
+
+    payment-db:
+        image: postgres:15-alpine
+        container_name: zenbilling-payment-db
+        environment:
+            - POSTGRES_USER=payment_user
+            - POSTGRES_PASSWORD=payment_password
+            - POSTGRES_DB=payment_db
+        ports:
+            - "5433:5432"
+        volumes:
+            - payment-db-data:/var/lib/postgresql/data
+            - ./prisma/schema.prisma:/docker-entrypoint-initdb.d/schema.prisma
+        networks:
+            - payment-network
+        restart: unless-stopped
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U payment_user -d payment_db"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+networks:
+    payment-network:
+        driver: bridge
+
+volumes:
+    payment-db-data:
